@@ -1,17 +1,16 @@
 name: adult-spine-models
 channels:
-  - conda-forge
   - defaults
 dependencies:
-  - ipdb
+  - python=3.7
   - jupyterlab
-  - matplotlib
-  - notebook
   - numpy
-  - pandas
-  - python=3.7.12
   - scipy
+  - h5py
+  - matplotlib
   - seaborn
-  - statannotations
-  - statsmodels
   - xarray
+  - statsmodels
+  - ipdb
+  - statannotations
+prefix: C:\Users\Gregg\anaconda3\envs\adult-spine-models
