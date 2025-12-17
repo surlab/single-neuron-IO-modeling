@@ -2,90 +2,20 @@
 import numpy as np
 from src import config as cfg
 from src import helper_functions as hf
-import xarray as xr
 import pandas as pd
+from scipy import stats 
+import ipdb 
+import xarray as xr
 
 import statsmodels.api as sm
 from statsmodels.formula.api import ols
 
 
-#########
-#Default functions must be defined first so they have something to point to
-def democratic_weights(spine_data):
-    return get_weight_matrix(spine_data, hf.spines_dist_from_root, include_all)
 
 
 
-def linear_integration(traces):
-    return np.sum(traces, axis=0) #should be directions x samples
-
-def somatic_identity(traces):
-    #This somatic function is pass through, it does not apply an additional linear or nonlinear normalization on top of the integration
-    return traces
 
 
-
-#############
-def run_subset_model(spine_data, weight_function = democratic_weights, subset='all'):
-    spine_activity_array, spines_per_fov_list = compile_spine_traces(spine_data, subset = subset)
-    return run_model(spine_data, spine_activity_array, spines_per_fov_list, weight_function = weight_function)
-
-
-def compile_spine_traces(spine_data, mask_func = None):
-    #idea is to put them all in a single array that can be sliced quickly
-    #dimensison are spines x stims x trials x timestamps
-
-    #we want to be able to slice this so that for a certain spine (all spines in an FOV)
-    #we grab the Nth trial - all timstams and all stims
-    #ideally we could do this in a single slice...
-    #we will be able to do this using this notation
-    #######
-    #a = np.zeros((5, 16, 10, 91))
-    #print(a.shape)
-    ##lets try to grab the 1st presentation for spine 1 and the second for spine 2
-    #sliced = a[np.arange(0, a.shape[0], 1), :,(0,2,4,6,7) , :]
-    #print(sliced.shape)
-    ########
-
-    activity_list = []
-    spines_per_fov_list = []
-    spine_labels = []
-    for i, (fov_activity_meta, fov_metadata )in enumerate(hf.fov_generator(spine_data)):
-        fov_activity = np.array(fov_activity_meta['trial_traces'][:,:,0,:,:])
-
-        fov_activity = fov_activity.swapaxes(0,-1)  #send samples to the last axes
-        fov_activity = fov_activity.swapaxes(  1, 2) #bring directions in front of presentations
-            #Now should be spines x directions x presentations x samples
-
-        bap_trials = get_subset_mask(fov_activity_meta, mask_func)
-        #Should be directions x presntations
-
-        fov_activity_subset = mask_traces(bap_trials, fov_activity)
-        #Make sure you check this
-
-        activity_list.extend(list(fov_activity_subset))
-
-        spines_in_fov = len(fov_activity_subset)
-        spines_per_fov_list.append(spines_in_fov)
-
-        these_spine_labels = [f'fov_{i}_spine_{j}' for j in range(spines_in_fov)]
-
-        spine_labels.extend(these_spine_labels)
-
-    #print('####')
-    all_spine_activity_array = np.array(activity_list) #this is spines x directions x presentations x samples
-
-    #here seems like a good time to make this into an xarray as well...
-    #except it looks like xarray won't let me slice this way. So would have to go to numpy and back again...
-    #spine_labels = ['fov_name'+str(i) for i in range(a.shape[0])]
-    direction_labels = hf.get_direction_labels(spine_data, fov_num = 0)
-    sample_labels = hf.get_trial_time_labels(spine_data, fov_num = 0)
-
-    data_xr = xr.DataArray(all_spine_activity_array,
-    coords={'spines': spine_labels,'directions': direction_labels,'samples': sample_labels},
-    dims=["spines", "directions", "presentations", "samples"])
-    ######
-    return data_xr, spines_per_fov_list
 
 
 def shuffle_along_axis(a, axis): #from https://stackoverflow.com/questions/5040797/shuffling-numpy-array-along-a-given-axis
@@ -98,34 +28,7 @@ def shuffle_spine_traces(spine_traces):
     rng = np.random.default_rng()
     return rng.permuted(spine_traces, axis=1)
 
-def get_subset_mask(fov_activity_meta, mask_func):
-    trial_param = mask_func(fov_activity_meta)
-    trials = hf.get_stim_num(fov_activity_meta)
-    presentations = hf.get_presentation_num(fov_activity_meta)
-    reshaped_trial_params = np.reshape(trial_param, (trials,presentations))
-    #print(reshaped_trial_params.shape)
-    #Should be directions x presntations - verified. As long as downstream uses correctly
-    return reshaped_trial_params
 
-
-def all_trials(fov_activity_meta):
-    bap_trials = baps_trials_only(fov_activity_meta)
-    return np.ones(bap_trials.shape)
-
-def baps_trials_only(fov_activity_meta):
-    return np.array(hf.get_bap_trials_meta(fov_activity_meta)).astype(int)
-
-def no_bap_trials(fov_activity_meta):
-    bap_trials = baps_trials_only(fov_activity_meta)    
-    return invert_bool(bap_trials)
-
-def run_model(spine_data, spine_activity_array, spines_per_fov_list, weight_function):
-    model_traces = compute_model_output_from_random_sampled_fovs(spine_data,
-                                                                      spine_activity_array,
-                                                                      spines_per_fov_list,
-                                                                      simulated_trials_per_stim=cfg.simulated_trials_per_stim)
-    model_tuning_curve_normalized, model_max_amplitude = compute_normalized_tuning_curves(model_traces)
-    return model_traces, model_tuning_curve_normalized, model_max_amplitude
 
 
 
@@ -136,48 +39,6 @@ def init_traces_xarray(all_spine_activity_array, simulated_trials_per_stim):
     coords={'directions': all_spine_activity_array['directions'],'samples': all_spine_activity_array['samples']},
     dims=["directions", "presentations", "samples"])
     return model_output
-
-#Now we need a function to slice this array meaningfully
-#basically we need a different random integer for each FOV
-#mutliply that out to be an array of the right length
-def compute_model_output_from_random_sampled_fovs(spine_data,
-                                                all_spine_activity_array,
-                                                spines_per_fov_list,
-                                                simulated_trials_per_stim = 10,
-                                                weight_function=democratic_weights,
-                                                integration_function = linear_integration,
-                                                somatic_function = somatic_identity,
-                                                ):
-
-    ##Need to break this into seperate modules. Bootsrapping will be a bit tricky? What if different nonlinearities are better for different runs?
-    #I guess you run them all and then sort it out after.
-    #we dont want to have to save all the model outputs, that will get kinda big
-    #so its ok to bootstrap this function after we have extracted the rele
-    #except a list for each - full prameters sets of weight, integration and somatic pairs. Also should pass in flags for unresponsive and exclude baps here
-
-
-    num_directions = len(all_spine_activity_array['directions'])
-    num_samples= len(all_spine_activity_array['samples'])
-    model_output = xr.DataArray(np.zeros((num_directions, simulated_trials_per_stim, num_samples)),
-                                coords={'directions': all_spine_activity_array['directions'],'samples': all_spine_activity_array['samples']},
-                                dims=["directions", "presentations", "samples"])
-
-    for i in range(simulated_trials_per_stim):
-        simulated_trial_traces = sample_trial_from_fov(all_spine_activity_array, spines_per_fov_list)
-
-        #multiply by weights here
-        weighted_simulated_trial_traces = weight_function(spine_data, simulated_trial_traces)
-
-        #apply integration model here
-        simulated_input_to_soma = integration_function(weighted_simulated_trial_traces)
-
-        #apply somatic nonlinearity here
-        simulated_output_of_soma = somatic_function(simulated_input_to_soma)
-
-        model_output[:,i,:] = simulated_output_of_soma
-
-
-    return model_output #should be directions x simulated_trials x samples (like the soma)
 
 
 
@@ -198,114 +59,37 @@ def sample_trial_from_fov(all_spine_activity_array, spines_per_fov_list):
 
 
 
-
-#Getting the weight matricies
-###############################################################################################################
-
-#get_weight_matrix(spine_data, hf.spines_dist_from_root, include_all)
-
-def get_weight_matrix(spine_data, param_func, weight_func=None):
-    param_vector = []
-    for i, (fov_activity, fov_metadata )in enumerate(hf.fov_generator(spine_data)):
-        fov_params = param_func(fov_activity, fov_metadata)
-        param_vector.extend(fov_params)
-    param_array = np.array(param_vector)
-    if weight_func:
-        weight_array = weight_func(param_array)
-    else:
-        weight_array = param_array
-
-    #Need to replace NANs with 0
-    weight_array = np.nan_to_num(weight_array, nan=0.0, posinf=0.0, neginf=0.0)
-    #we only want to normalize if its linear (and makes sense to normalize within cell, not within FOV)
-    #but actually this won't affect binary weights - just dividing by 1.
-    normalized_weight_array = weight_array/np.max(weight_array)
-    return normalized_weight_array
-
-def weights_from_distance_lin(spine_data):
-    return get_weight_matrix(spine_data, hf.spines_dist_from_root, weight_from_distance)
-
-def weight_from_distance(dist_array):
-    #y = mx+b
-    b = 1
-    m = -.002
-    return dist_array*m+b
-
-def weights_from_size_lin(spine_data):
-    return get_weight_matrix(spine_data, hf.spines_size, weight_from_size)
-
-def weight_from_size(size_array):
-    #y = mx+b
-    b = .2
-    m = .8
-    return size_array*m+b
-
-def include_all(param_array):
-    weight_array = binary_weights(param_array, 100)
-    return weight_array
-
-def top_20(param_array):
-    weight_array = binary_weights(param_array, 20)
-    return weight_array
-
-def bottom_20(param_array):
-    weight_array = binary_weights(param_array, -20)
-    return weight_array
-
-def random_20(param_array):
-    random_param_array = np.random.radnint(0,len(param_array))
-    weight_array = binary_weights(random_param_array, 20)
-    return weight_array
-
-def binary_weights(param_array, threshold_percentage):
-    #if there are 100 spines and threshold_percentage, this will take the 20 spines with the highest params. NOT all spines with a param within 20% of the highest param.
-    total_spines = len(param_array)
-    threshold_n = round(total_spines*threshold_percentage/100)
-
-    ind = np.argpartition(param_array, -threshold_n)[-threshold_n:]
-    weights = np.zeros(len(param_array))
-    weights[ind] = 1
-    return weights
+def sample_trials_from_fov(all_spine_activity_array, spines_per_fov_list, draw_trials):
+    num_presentations = len(all_spine_activity_array['presentations'])
+    #print(len(spines_per_fov_list))
+    #draw a random integer for each fov
+    random_trial_ints = np.random.randint(0, high=num_presentations, size=(len(spines_per_fov_list), draw_trials))
+    rand_trials_for_spines = list(np.repeat(random_trial_ints, spines_per_fov_list))
 
 
-def weights_from_neck_len_lin(spine_data):
-    pass
+    raise() #need to test that this works
 
-def weight_from_neck_len(size_array):
-    #y = mx+b
-    b = 1
-    m = -.8
-    return size_array*m+b
+    spine_indicies = np.arange(0, len(all_spine_activity_array['spines']), 1)
+    numpyfied_activity = np.array(all_spine_activity_array)
+    simulated_trail_traces = numpyfied_activity[spine_indicies, :, rand_trials_for_spines, :]
 
+    simulated_trial_traces = xr.DataArray(simulated_trail_traces,
+        coords={'spines': all_spine_activity_array['spines'], 'directions': all_spine_activity_array['directions'],'samples': all_spine_activity_array['samples']},
+        dims=["spines", "directions", "samples"])
+    return simulated_trial_traces #should be spines x directions x simulated_trials x samples
 
-def responsive_spines_bin(spine_data):
-    return get_weight_matrix(spine_data, hf.spines_responsiveness, None)
-
-def unresponsive_spines_bin(spine_data):
-    return get_weight_matrix(spine_data, hf.spines_responsiveness, invert_bool)
-
-def invert_bool(binary_param_array):
-    return np.logical_not(binary_param_array).astype(int)
 
 
 ###############################################################################################################
 
 def apply_weights(weights, traces):
-    tile_dims = (len(traces['directions']), len(traces['samples']), 1)
-    tiled_weights = np.tile(weights, tile_dims )
-    tiled_weights = np.rollaxis(tiled_weights, -1)
-    weighted_traces = traces*tiled_weights
+    #you should not need to tile as long as one of them is the matching dimension. 
+    # see https://stackoverflow.com/questions/32189190/numpy-array-multiplication-with-arrays-of-arbitrary-dimensions
+    #tile_dims = (len(traces['directions']), len(traces['samples']), 1)
+    weighted_traces = (weights*traces.T).T
     return weighted_traces
 
-def mask_traces(weights, traces):
-    #weights is stims x presentations
-    #traces is coming in as spines x stims x presentations x samples
-    #and its just a numpy array, not an Xarray.
-    tile_dims = (traces.shape[3], traces.shape[0], 1,1) #( samples x spines)
-    tiled_weights = np.tile(weights, tile_dims )
-    tiled_weights = np.moveaxis(tiled_weights, 0,3)
-    masked_traces = traces*tiled_weights
-    return masked_traces
+
 
 
 ###############################################################################################################
@@ -314,75 +98,12 @@ def mask_traces(weights, traces):
 ###############################################################################################################
 #Not particular to the model - mostly tuning curve and handling onset/offset/traces
 ###############################################################################################################
-def linear_normalization(array_in):
-    zeroed_array = array_in-np.min(array_in)
-    return zeroed_array/np.max(zeroed_array)
-
-def select_timesteps(traces, first_sample =cfg.first_sample_to_take, last_sample =cfg.last_sample_to_take):
-    selected_timesteps = traces[:,:,first_sample:last_sample]
-    return selected_timesteps
-
-def get_stim_on_traces(traces):
-    return select_timesteps(traces, first_sample =cfg.stim_start, last_sample =cfg.stim_end )
 
 
-def compute_trial_means(traces):
-    on_period = get_stim_on_traces(traces)
-    #This is for the anova - output should be very similar to kyles trial amps
-    #should be shape: stims x presentations as opposed to the tuning curve which is just stims x 1
-    #on_period = on_period.reshape(on_period.shape[0], on_period.shape[1]*on_period.shape[2])
-    try:
-        trial_means = on_period.mean(dim='samples')
-    except TypeError as E:
-        trial_means = on_period.mean(axis=1)
-    return trial_means
-
-def compute_normalized_trial_means(traces):
-    trial_means = compute_trial_means(traces)
-    normalized_trial_means = linear_normalization(trial_means)
-    return normalized_trial_means
 
 
-def compute_mean_tuning(traces):
-    trial_means = compute_trial_means(traces)
-    try:
-        stim_means = trial_means.mean(dim='presentations')
-    except TypeError as E:
-        stim_means = trial_means.mean(axis=1)
-    return stim_means
-
-def compute_median_tuning(traces):
-    trial_means = compute_trial_means(traces)
-    try:
-        stim_medians = trial_means.median(dim='presentations')
-    except TypeError as E:
-        stim_medians = trial_means.median(axis=1)
-    return stim_medians
 
 
-def compute_and_compare_tuning_curves(traces_1, traces_2):
-    means_1 = compute_tuning_curves(traces_1)
-    means_2 = compute_tuning_curves(traces_2)
-    return compare_tuning_curves(means_1, means_2)
-
-def compare_tuning_curves(means_1, means_2):
-    #first make both unit norm
-    means_1_unit_norm = make_unit_norm(means_1)
-    means_2_unit_norm = make_unit_norm(means_2)
-    return np.dot(means_1_unit_norm, means_2_unit_norm)
-
-def make_unit_norm(array_in):
-  return array_in/np.linalg.norm(array_in)
-
-
-def compute_tuning_curves(traces):
-    return compute_median_tuning(traces)
-
-def compute_normalized_tuning_curves(traces):
-    tuning_curve = compute_tuning_curves(traces)
-    normalized_tuning_curve = linear_normalization(tuning_curve)
-    max_amp = np.max(tuning_curve)
-    return normalized_tuning_curve, max_amp
 
 
 #def compare_tuning_curves_dot(means_1, means_2):
@@ -727,111 +448,3 @@ def create_current_sources(h, spine_data, shifts_by_fov):
             #raise
     return current_input_dict
 
-
-##################
-#DEPRECATED
-
-
-def test_MC_Pitts_model( soma_data, soma_act_thresh):
-    #For now just minumize the pairwise difference between the two?
-    pass
-
-
-def plot_MC_Pitts_model():
-    #sort by activity sorting within each direction (based off counts)
-
-
-    #sort by same directional sorting as somas
-
-    #plot both
-    fig, axs = plt.subplots(1,2)
-    axs[0].imshow(flatten_for_image(bool_soma_activity))
-    #axs[1].imshow(
-
-
-def run_MC_Pitts_model(spine_data, spine_act_thresh, soma_count_thresh):
-
-    #loop through each spine
-    #TODO could we make this a generator?
-    count_active_spines = np.zeros(spine_traces.shape)
-    for fov in spines['dend_cell'][2,:]:
-        ref = spines['dend_cell'][2,fov]
-        fov_field_2 = spines[ref]#['DSI']
-        spine_count = fov_field_2['trial_traces'].shape[-1]
-        for i in range(spine_count):
-            this_spine_traces = np.array(fov_field_2['trial_traces'][:,:,0,:,i].swapaxes(0,-1))
-
-            #select the time period means of interest
-            this_spine_sub_traces = select_timesteps(soma_traces)
-            this_spine_period_means = get_period_means(this_spine_sub_traces)
-
-            #apply spine_act_threshold on each
-            bool_input = int(this_spine_period_means>spine_act_thresh)
-
-            #add to sum (bool will make it a count
-            count_active_spines += bool_input
-
-    #done looping
-    #apply soma_count_thresh to get to bool
-    simulated_soma_response =  int(count_active_spines>soma_count_thresh)
-    return simulated_soma_response
-
-
-
-
-
-def get_summed_spine_trace_depracated(spine_data):
-    #Get all the traces from all the spines
-    #TODO could we make this a generator?
-
-    ex_spine_trace = hf.get_example_traces(spine_data)
-    summed_spine_traces = np.zeros(ex_spine_trace.shape)
-
-    for fov in spine_data['dend_cell'][2,:]:
-        #ref = spine_data['dend_cell'][2,fov]
-        fov_field_2 = spine_data[fov]#['DSI']
-        spine_count = fov_field_2['trial_traces'].shape[-1]
-        for i in range(spine_count):
-            this_spine_traces = hf.get_traces(spine_data, fov=fov, spine_index=i)
-            summed_spine_traces += this_spine_traces
-
-    return summed_spine_traces
-
-
-def get_summed_trial_sampled_spine_trace_depracated(spine_data):
-    sampling_mat = trial_sampling(spine_data)
-    #dimensions = stims x simulated_trials x FOVs.
-
-    ex_spine_trace = hf.get_example_traces(spine_data)
-    stims = ex_spine_trace.shape[0]
-    samples = ex_spine_trace.shape[-1]
-    simulated_trials = sampling_mat.shape[1]
-    num_fovs = sampling_mat.shape[-1]
-    assert stims == sampling_mat.shape[0]
-
-    summed_traces = np.zeros((stims, simulated_trials, samples))
-    for stim_num in range(stims):
-        for trail_num in range(simulated_trials):
-            for fov_num in range(num_fovs):
-                this_fov = hf.get_fov(spine_data, fov=fov_num)
-                spine_count = this_fov['trial_traces'].shape[-1]
-                for i in range(spine_count):
-                    #Might be faster not to go all the way back to the file here...
-                    this_spine_traces = hf.get_traces(spine_data, fov=fov_num, spine_index=i)
-                    og_trial_num = sampling_mat[stim_num, trail_num, fov_num]
-                    summed_traces[stim_num, trail_num, :] += this_spine_traces[stim_num, og_trial_num, :]
-    return summed_traces
-
-
-
-
-def trial_sampling_deprecated(spine_data):
-    simulated_trials_per_stim = 10
-
-    ex_spine_trace = hf.get_example_traces(spine_data)
-    stims = ex_spine_trace.shape[0]
-    stim_repeats = ex_spine_trace.shape[1]
-    fovs = spine_data['dend_cell'][2,:].shape[0]
-
-    sampling_mat = np.random.randint(0,stim_repeats,(stims, simulated_trials_per_stim, fovs)) #dimensions = stims x simulated_trials x FOVs. each index is the og_trial - direction as assumed the same order
-    return sampling_mat

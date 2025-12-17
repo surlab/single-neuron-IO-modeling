@@ -1,0 +1,17 @@
+name: adult-spine-models
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ipdb
+  - jupyterlab
+  - matplotlib
+  - notebook
+  - numpy
+  - pandas
+  - python=3.7.12
+  - scipy
+  - seaborn
+  - statannotations
+  - statsmodels
+  - xarray

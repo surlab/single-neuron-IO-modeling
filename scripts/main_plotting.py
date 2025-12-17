@@ -1,5 +1,6 @@
 from src import plotting as plot
 from src import config as cfg
+from src import data_io as io
 import os
 import pandas as pd
 
@@ -21,7 +22,9 @@ def main_plotting_loop():
                 print(df.columns)
                 plot.plot_simulation_tuning_curves(df, prefix=exp)
         #if 'single_neuron_simulation_scores_10000' in filename:
-        if 'single_neuron_simulation_scores_1000_01292024' in filename:
+        if 'single_neuron_simulation_scores_1000_20250319195617' in filename:
+        # most plots from 'single_neuron_simulation_scores_1000_20240222142434'
+        #if 'single_neuron_simulation_scores_1000_01292024' in filename:
             pass
             print("###########################################################")
             print("###########################################################")
@@ -31,6 +34,11 @@ def main_plotting_loop():
             print('')
             fullpath = os.path.join(cfg.collect_summary_at_path, filename)
             df = pd.read_csv(fullpath, index_col=0)
+            io.simplify_output_csv(df)
+            try:
+                io.simplify_output_csv(df, column_of_interest = 'model_soma_similarity_score_p_value')
+            except KeyError as E:
+                pass #its probably not in the DF...
             plot.plot_all_simulation_scores(df)
 
 if __name__ == "__main__":

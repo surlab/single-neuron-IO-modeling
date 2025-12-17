@@ -2,8 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import seaborn as sns
+sns.set_context('poster')
+import pandas as pd
+
 import functools
 from statannotations.Annotator import Annotator
+from scipy import stats
 
 from src import config as cfg
 from src import computation as comp
@@ -60,7 +64,7 @@ def plot_tuning_curves(ax=None, **kwargs):
 
 
 def line_plot_key_labels(ax=None, **kwargs):
-
+    fig, ax = new_ax(ax)
     for key, array in kwargs.items():
 
         ax.plot(array, label=key)
@@ -380,12 +384,13 @@ def plot_decorator(plot_func):
         print('')
         print('Creating next plot')
         #run the function
-        prefix = plot_func(*args, fig=fig, ax=ax,  **kwargs)
+        prefix, plot_title = plot_func(*args, fig=fig, ax=ax,  **kwargs)
         print(f'Finished with {prefix}')
 
         #do something after
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=8, markerscale=3)
+        ax.set_title(plot_title, fontsize=12, y=1.2)
+        plot_name = prefix+'_'+plot_title.replace(' ', '_')
 
         ## Get the legend handles and add them to plt.legend, so that the right handles are addigned
         #legend_handles, _= plt.gca().get_legend_handles_labels()
@@ -393,7 +398,7 @@ def plot_decorator(plot_func):
         #           labels=['Group 1: C1', 'Group 1: C2', 'Group 2: C1', 'Group 2: C2'])
 
 
-        figname = f'{prefix}{"-"*bool(prefix)}model_performance_summaries.{cfg.figure_type}'
+        figname = f'{plot_name}{"-"*bool(plot_name)}model_sum.{cfg.figure_type}'
         fig_path = os.path.join(cfg.collect_summary_at_path, figname)
         print(f'Saving figure to {fig_path}')
         fig.savefig(fig_path, bbox_inches='tight')
@@ -404,161 +409,128 @@ def plot_decorator(plot_func):
 
 @plot_decorator
 def plot_model_simulation_scores(df,  prefix='plot2', fig=None, ax=None):
-    sns.lineplot(data=df.loc[df['responsive_status'] == False], x='nickname', y='model_soma_similarity_score', hue='experiment_id',
+    sns.lineplot(data=df.loc[df['soma_responsive_status'] == False], x='nickname', y=cfg.method_to_compare, hue='experiment_id',
                  palette='Blues', marker='o')
-    sns.lineplot(data=df.loc[df['responsive_status'] == True], x='nickname', y='model_soma_similarity_score', hue='experiment_id',
+    sns.lineplot(data=df.loc[df['soma_responsive_status'] == True], x='nickname', y=cfg.method_to_compare, hue='experiment_id',
                  palette='Reds', marker='o')
     plt.setp( ax.xaxis.get_majorticklabels(), rotation=-45, ha="left", rotation_mode="anchor") #from https://stackoverflow.com/questions/28615887/how-to-move-a-tick-label-in-matplotlib
     return prefix
 
 
-@plot_decorator
-def plot_4(df,  prefix='plot4', fig=None, ax=None):
-    #Democratic, distance, size
-    palette_colors = [cfg.colors['unresponsive'], cfg.colors['responsive']]
-    prefix = my_violin_swarm(df,  x='weights', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            #order=['resp_only', 'democratic_weights', 'unresp_only'],
-                            alpha= .6,
-                            hue = 'responsive_status',
-                            split=True
-                            )
-    return prefix
-
-@plot_decorator
-def plot_4_2(df,  prefix='plot4', fig=None, ax=None):
-    #Democratic, distance, size
-    palette_colors = [cfg.colors['unresponsive'], cfg.colors['responsive']]
-    prefix = my_violin_swarm(df,  x='weights', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            #order=['resp_only', 'democratic_weights', 'unresp_only'],
-                            alpha= .6,
-                            hue = 'responsive_status',
-                            split=False
-                            )
-    return prefix
-
-@plot_decorator
-def plot_3(df,  prefix='plot3', fig=None, ax=None):
-    #Democratic, distance, size
-    print(df.head())
-    palette_colors = [cfg.colors['unresponsive'], cfg.colors['responsive']]
-    prefix = my_violin_swarm(df,  x='weights', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            #order=['democratic_weights', 'size_weights', 'dist_weights'],
-                            alpha= .6,
-                            hue = 'responsive_status',
-                            split=True
-                            )
-    return prefix
-
-@plot_decorator
-def plot_3_2(df,  prefix='plot3', fig=None, ax=None):
-    #Democratic, distance, size
-    print(df.head())
-    palette_colors = [cfg.colors['unresponsive'], cfg.colors['responsive']]
-    prefix = my_violin_swarm(df,  x='weights', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            #order=['democratic_weights', 'size_weights', 'dist_weights'],
-                            alpha= .6,
-                            hue = 'responsive_status',
-                            split=False
-                            )
-    return prefix
-
-@plot_decorator
-def plot_2(df,  prefix='plot2', fig=None, ax=None):
-    palette_colors = [cfg.colors['baps_trials_only'], cfg.colors['responsive'], cfg.colors['no_bap_trials']]
-    prefix = my_violin_swarm(df,  x='trial_subset', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            order=['baps_trials_only', 'all_trials', 'no_bap_trials'],
-                            alpha= .6,
-                            )
-    return prefix
-
-@plot_decorator
-def plot_1(df,  prefix='plot1', fig=None, ax=None):
-    palette_colors = [cfg.colors['responsive'], cfg.colors['unresponsive']]
-    prefix = my_violin_swarm(df,  x='responsive_status', y='model_soma_similarity_score',
-                            prefix=prefix, fig=fig, ax=ax,
-                            palette=palette_colors,
-                            alpha=.6,
-                            order=[True, False],
-                            )
-    return prefix
-
-
 def my_violin_swarm(df, x, y, prefix='', fig=None, ax=None, alpha=.4, palette=None,
                     cut=2, linewidth_vi=4, linewidth_sw=1, size=15, color_sw='k', order=None,
-                    hue=None, split=False
+                    hue=None, split=False, paired=False, include_line = cfg.include_line, include_swarm = cfg.include_swarm
                     ):
     if not(palette is None):
         palette = sns.color_palette(palette, len(palette))
 
+    ax = plt.gca()
+    #also plot connecting them 
+    if include_line:
+        with plt.rc_context({'lines.linewidth': 0.5}):
+            out = sns.pointplot(data=df,  x=x, y=y, hue='experiment_id', markers='.', order=order, palette='Greys')
+            plt.setp(ax.lines, zorder=100)
+            #plt.setp(ax.collections, zorder=100, label="")
 
-    #sns.violinplot(data=df, x='responsive_status', y='model_soma_similarity_score')
+    
     if cfg.plot_type == 'violin':
         sns.violinplot(data=df, x=x, y=y, palette=palette, hue=hue, split=split,
                        saturation=.75, cut=cut, linewidth=linewidth_vi,
-                       order=order, hue_order=order)
+                       order=order, hue_order=order, inner=None)
+        for violin in ax.collections[::]:
+            violin.set_alpha(alpha)
+        sns.boxplot(data=df, x=x, y=y, color="gray", width=0.15, showfliers=False, notch=False, order=order, boxprops={'zorder': 2}, bootstrap=1000)
+
 
     if cfg.plot_type == 'bar':
         sns.barplot(data=df, x=x, y=y, palette=palette, hue=hue,
                        saturation=.75, linewidth=linewidth_vi,
                        order=order, hue_order=order)
 
-    ax = plt.gca()
+    if cfg.plot_type == 'box_whisker':
+        sns.boxplot(data=df, x=x, y=y, palette=palette, hue=hue,
+                       saturation=.75, linewidth=linewidth_vi,
+                       order=order, hue_order=order, notch=False)
+        for patch in ax.patches:
+            r, g, b, a = patch.get_facecolor()
+            patch.set_facecolor((r, g, b, .3))
+
+    
     pairs_list = []
     for i, category_1 in enumerate(df.loc[:,x].unique()):
         for j, category_2 in enumerate(df.loc[:,x].unique()):
             if j>i: #this prevents comparing to self and repeated pars
                 pairs_list.append((category_1, category_2))
 
-    try:
+    #def annotate_pairs(pair_list, ax, test)
+    #pvalues = []
+    #for pair in pairs_list:
+    #    pair_1_values = 
+    #    pair_2_values = 
+    #    pvalues.append(stats.ttest_rel(pair_1_values, pair_2_values, alternative="two-sided").pvalue)
+    # Transform each p-value to "p=" in scientific notation
+    #formatted_pvalues = [f'p={pvalue:.2e}' for pvalue in pvalues]
+
+    fall_back_on_unpaired_t = False
+    if paired:
+        try:
+            annotator = Annotator(ax, pairs_list, data=df, x=x, y=y, order=order)
+            annotator.configure(test='t-test_paired', text_format='full', verbose=True, hide_non_significant=True,)
+            #formatted_pvalues = [f'p={pvalue:.2e}' for pvalue in pvalues]
+            _, test_results = annotator.apply_and_annotate()
+            #stat_results = [result.data.pvalue for result in test_results]
+            ### from here https://stackoverflow.com/questions/73363123/how-to-extract-stats-data-from-statannotations-package
+            #print('################>>>>>>>>>>>')
+            #print(stat_results)
+        except Exception as E:
+            fall_back_on_unpaired_t = True
+    if not(paired) or fall_back_on_unpaired_t:
         annotator = Annotator(ax, pairs_list, data=df, x=x, y=y, order=order)
-        annotator.configure(test='t-test_paired', text_format='star', loc='outside')
+        annotator.configure(test='t-test_ind', text_format='full', verbose=True, hide_non_significant=True,)
         annotator.apply_and_annotate()
-    except Exception as E:
-        annotator = Annotator(ax, pairs_list, data=df, x=x, y=y, order=order)
-        annotator.configure(test='t-test_ind', text_format='star', loc='outside')
-        annotator.apply_and_annotate()
-    
-
-    for violin in ax.collections[::]:
-        violin.set_alpha(alpha)
-    #sns.violinplot(data=df, x='responsive_status', y='model_soma_similarity_score', hue='responsive_status', order=['responsive', 'unresponsive'], hue_order=None,
-    #    bw='scott', cut=0, scale='area', scale_hue=True, gridsize=100, width=0.8, inner='box',
-    #    split=False, dodge=True, orient=None, linewidth=None, color='r', palette='Reds', saturation=0.75)
-    #Pallette - sns.color_palette(my_palette, 2)
-
-    if cfg.include_swarm:
-        sns.stripplot(data=df,  x=x, y=y, marker="x", linewidth=linewidth_sw, size=size, color=color_sw, order=order)#)# , , )#, order=['responsive', 'unresponsive'])
-    #sns.swarmplot(data=df, x='responsive_status', y='model_soma_similarity_score', hue='responsive_status', order=['responsive', unresponsive], hue_order=None, dodge=False,
-    #    orient=None, color=None, palette=sns.color_palette(my_palette, 2), size=5, edgecolor='gray', linewidth=0, hue_norm=None,
-    #    native_scale=False, formatter=None, legend='auto', warn_thresh=0.05, ax=None, **kwargs)
 
 
-    #also plot connecting them 
-    if cfg.include_line:
-        sns.lineplot(data=df,  x=x, y=y, hue='experiment_id',
-                 color=color_sw)#, order=order)
+    if include_swarm:
+        #sns.stripplot(data=df,  x=x, y=y, marker="o", s=10, jitter=.15, linewidth=linewidth_sw, size=size, color=color_sw, order=order)#)# , , )#, order=['responsive', 'unresponsive'])
+        sns.swarmplot(data=df,  x=x, y=y, marker="o", s=10, linewidth=linewidth_sw, size=size, color=color_sw, order=order)
 
-    csv_name = f'{prefix}{"-"*bool(prefix)}model_performance_summaries.csv'
-    csv_path = os.path.join(cfg.collect_summary_at_path, csv_name)
-    df.to_csv(csv_path)
+
+    #csv_name = f'{prefix}{"-"*bool(prefix)}model_performance_summaries.csv'
+    #csv_path = os.path.join(cfg.collect_summary_at_path, csv_name)
+    #df.to_csv(csv_path)
+
+    plt.setp( ax.xaxis.get_majorticklabels(), rotation=-45, ha="left", rotation_mode="anchor") #from https://stackoverflow.com/questions/28615887/how-to-move-a-tick-label-in-matplotlib
     return prefix
+
+def filter_df_for_applicable_pairs(df, x_category):
+    experiment_ids = df['experiment_id'].unique()
+    experiment_set = set()
+    for experiment_id in experiment_ids:
+        #print(experiment_id)
+        present_list = []
+        for this_x_cat in df[x_category].unique():
+            similarity_score = df[
+                    (df['experiment_id']==experiment_id)
+                    & (df[x_category]==this_x_cat)
+                ].loc[:,cfg.method_to_compare]
+            present_list.append(not(similarity_score.isnull().values.any()))
+            #if experiment_id == 'BM020':
+                #print(this_x_cat, similarity_score)
+                #print(np.array(present_list).all())
+        if np.array(present_list).all():
+            experiment_set.add(experiment_id)
+    return df[df['experiment_id'].isin(experiment_set)]
+
 
 def plot_all_simulation_scores(df):
 
     #first plot: democratic_scores split by soma repsonsiveness
 
-    plot_1(df[(df['weights']=='democratic_weights') & (df['trial_subset']=='all_trials')])
 
+    #replace bools with strings
+    df['soma_responsive_status'] = np.where(df['soma_responsive_status'], 'Responsive somas', 'Unresponsive somas')
+
+    plot_1(df)
 
     #second_plot:
     #normalize the similarity scores first
@@ -567,78 +539,269 @@ def plot_all_simulation_scores(df):
         for exp_id in exp_ids:
             bool_index = df['experiment_id'] == exp_id
             exp_df = df[bool_index]
-            democratic_index = (df['weights']=='democratic_weights') & (df['trial_subset']=='all_trials')
+            democratic_index = (df['weighted_by']=='democratic_weights') & (df['trials_included']=='all_trials')& (df['somatic_function']=='all_trials')
             #print(democratic_index)
             #print('%%%%%%')
-            democratic_sim_score = float(exp_df[democratic_index]['model_soma_similarity_score'])
+            democratic_sim_score = float(exp_df[democratic_index][cfg.method_to_compare])
             #print(democratic_sim_score)
-            exp_df.loc[:,'model_soma_similarity_score'] = exp_df.loc[:,'model_soma_similarity_score']/democratic_sim_score
+            exp_df.loc[:,cfg.method_to_compare] = exp_df.loc[:,cfg.method_to_compare]/democratic_sim_score
             #must use .loc when setting so it doesn't copy the column
 
-            #print(exp_df['model_soma_similarity_score'])
+            #print(exp_df[cfg.method_to_compare])
             #put it back in the larger data frame
             df[bool_index] = exp_df
 
 
-    plot_model_simulation_scores(df, prefix='normalized')
-    plot_model_simulation_scores(df[df['trial_subset']=='all_trials'], prefix='normalized2')
+    #plot_model_simulation_scores(df, prefix='normalized')
+    #plot_model_simulation_scores(df[df['trials_included']=='all_trials'], prefix='normalized2')
+    #plot_2(df)
+    #plot_2a(df)
+    #plot_3(df)
+    #plot_3a(df)
+    plot_4a(df)
+    #plot_5(df)
+    #plot_6(df)
+    #plot_7(df)
 
-    plot_2(df[(df['weights']=='democratic_weights')
-           & (df['responsive_status']==True)
-           ], prefix = 'plot2R')
 
-    #plot_2(df[(df['weights']=='democratic_weights')
-    #       & (df['responsive_status']==True)
-    #       & ((df['experiment_id']=='ASC16')
-    #       | (df['experiment_id']=='ASC20')
-    #       | (df['experiment_id']=='ASC28 cell 3')
-    #       | (df['experiment_id']=='ASC22'))
-    #       ], prefix = 'plot2Rs')
 
-    #plot_3(df[
-    #           ((df['weights']=='democratic_weights')
-    #           | (df['weights']=='size_weights')
-    #           | (df['weights']=='dist_weights'))
-    #           & (df['trial_subset']=='all_trials')
-    #           ])
 
-    #plot_3_2(df[
-    #       ((df['weights']=='democratic_weights')
-    #       | (df['weights']=='size_weights')
-    #       | (df['weights']=='size_AND_dist')
-    #       | (df['weights']=='dist_weights'))
-    #       & (df['trial_subset']=='all_trials')
-    #       & ((df['experiment_id']=='ASC16')
-    #       | (df['experiment_id']=='ASC20')
-    #       | (df['experiment_id']=='ASC28 cell 3')
-    #       | (df['experiment_id']=='ASC22'))
-    #       ], prefix = 'plot3Rs')
+@plot_decorator
+def plot_1(df, fig=None, ax=None):
 
-    plot_3_2(df[
-           ((df['weights']=='democratic_weights')
-           | (df['weights']=='size_weights')
-           | (df['weights']=='size_AND_dist')
-           | (df['weights']=='dist_weights'))
-           & (df['trial_subset']=='all_trials')
-           & (df['responsive_status']==True)
-           ], prefix = 'plot3R')
+    pd.options.display.max_columns = None
+    #use a list of tuples for the columns and values to fliter on so this can be used for title and figname
+    filter_list = [
+            ('weighted_by', 'democratic_weights'),
+            ('integration_function', 'summation'),
+            ('trials_included','all_trials'),
+            ('spines_included','all_spines')
+        ] 
 
-    #plot_4(df[
-    #           ((df['weights']=='democratic_weights')
-    #           | (df['weights']=='resp_only')
-    #           | (df['weights']=='unresp_only'))
-    #           & (df['trial_subset']=='all_trials')
-    #           ])
+    for (column_name, condition) in filter_list:
+        df = df[df[column_name]==condition]
 
-    plot_4_2(df[
-               ((df['weights']=='democratic_weights')
-               | (df['weights']=='resp_only')
-               | (df['weights']=='unresp_only'))
-               & (df['trial_subset']=='all_trials')
-           & (df['responsive_status']==True)
-           ], prefix = 'plot4Rs')
+
+    suffix = (', ').join([condition for (column_name, condition) in filter_list])
+    plot_title = f'responsive vs unresponsive somas for {suffix}'
+
+    x = 'soma_responsive_status'
+    y = cfg.method_to_compare#cfg.method_to_compare
+    order=['Responsive somas', 'Unresponsive somas']
+    palette_colors = [cfg.colors['responsive'], cfg.colors['unresponsive']]
+    _ = my_violin_swarm(df,  x=x, y=y,
+                            fig=fig, ax=ax,
+                            palette=palette_colors,
+                            alpha=.6,
+                            order=order,
+                            include_line = False, include_swarm=False
+                            )
+    ax = plt.gca()
+
+    try:
+        df_sig = df[df['model_correlation_to_soma_r_p_value']<=.05]
+        sns.swarmplot(data=df_sig,  x=x, y=y, marker=(8,2,0), s=10, linewidth=1, size=15, color='k', order=order, label='significant')
+        df_not_sig = df[df['model_correlation_to_soma_r_p_value']>.05]
+        sns.swarmplot(data=df_not_sig,  x=x, y=y, marker='o', s=10, linewidth=1, size=15, color='k', order=order)
+    except KeyError as E:
+        sns.swarmplot(data=df,  x=x, y=y, marker='o', s=10, linewidth=1, size=15, color='k', order=order)
+    ax.set_ylim([0, 1])
+    #handles, labels = ax.get_legend_handles_labels()
+    #l = plt.legend(handles[0], labels[0])#, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+
+    return 'Plot1', plot_title
+
+
+
+
+#@plot_decorator
+#def plot_2(df, fig=None, ax=None):
+#    #use a list of tuples for the columns and values to fliter on so this can be used for title and figname
+#    filter_list = [
+#            ('weighted_by', 'democratic_weights'),
+#            ('soma_responsive_status','Responsive somas')
+#        ] 
+#
+#    for (column_name, condition) in filter_list:
+#        df = df[df[column_name]==condition]#
+#
+#    suffix = (', ').join([condition for (column_name, condition) in filter_list])
+#    plot_title = f'spine bap inclusion for {suffix}'#
+#
+#    x_category = 'trials_included'
+#    df = filter_df_for_applicable_pairs(df, x_category)#
+#
+#    palette_colors = [cfg.colors['baps_trials_only'], cfg.colors['responsive'], cfg.colors['no_bap_trials']]
+#    prefix = my_violin_swarm(df,  x=x_category, y=cfg.method_to_compare,
+#                            fig=fig, ax=ax,
+#                            palette=palette_colors,
+#                            order=['baps_trials_only', 'all_trials', 'no_bap_trials'],
+#                            alpha= .6, paired=True,
+#                            )
+#    ax = plt.gca()
+#    ax.set_ylim([0, 1])
+#    return 'Plot2', plot_title
+
+
+@plot_decorator
+def plot_2a(df, fig=None, ax=None):
+    #with a little extra effort I could probably use the same helper function as for weights for this one too...
+    #use a list of tuples for the columns and values to fliter on so this can be used for title and figname
+    filter_list = [
+            ('weighted_by', 'democratic_weights'),
+            ('soma_responsive_status','Responsive somas'),
+            ('spines_included','all_spines'),
+            ('somatic_function','identity')
+        ] 
+
+    for (column_name, condition) in filter_list:
+        df = df[df[column_name]==condition]
+
+    suffix = (', ').join([condition for (column_name, condition) in filter_list])
+    plot_title = f'spine bap inclusion for {suffix}'
+
+    x_category = 'trials_included'
+    df = filter_df_for_applicable_pairs(df, x_category)
+
+    palette_colors = [cfg.colors['all_trials'], cfg.colors['no_bap_trials']]
+    prefix = my_violin_swarm(df,  x=x_category, y=cfg.method_to_compare,
+                            fig=fig, ax=ax,
+                            palette=palette_colors,
+                            order=['all_trials', 'no_bap_trials'],
+                            alpha= .6, paired=True,
+                            )
+    ax = plt.gca()
+    ax.set_ylim([0, 1])
+    return 'Plot2a', plot_title
+
+@plot_decorator
+def plot_7(df, fig=None, ax=None):
+    #with a little extra effort I could probably use the same helper function as for weights for this one too...
+    #use a list of tuples for the columns and values to fliter on so this can be used for title and figname
+    filter_list = [
+            ('weighted_by', 'democratic_weights'),
+            ('soma_responsive_status','Responsive somas'),
+            ('spines_included','all_spines'),
+            ('trials_included','all_trials'),
+        ] 
+
+    for (column_name, condition) in filter_list:
+        df = df[df[column_name]==condition]
+
+    suffix = (', ').join([condition for (column_name, condition) in filter_list])
+    plot_title = f'somatic function for {suffix}'
+
+    x_category = 'somatic_function'
+    df = filter_df_for_applicable_pairs(df, x_category)
+
+    palette_colors = [cfg.colors['responsive']]
+    prefix = my_violin_swarm(df,  x=x_category, y=cfg.method_to_compare,
+                            fig=fig, ax=ax,
+                            palette=palette_colors,
+                            #order=['all_trials', 'no_bap_trials'],
+                            alpha= .6, paired=True,
+                            )
+    ax = plt.gca()
+    ax.set_ylim([0, 1])
+    return 'Plot7', plot_title
+
+
+
+def plot_3(df):
+    weight_list =  ['democratic_weights', 'spine_size', 'spine_amplitude', 'distance_from_soma']
+    plot_weight(df, weighted_by = weight_list, prefix='Plot3')
+
+def plot_3a(df):
+    weight_list =  ['democratic_weights', 'spine_size', 'distance_from_soma', 'spine_amplitude']
+    plot_weight(df, weighted_by = weight_list, prefix='Plot3a', filter=False)
+
+def plot_4(df):
+
+    #need to exclude democraticxall_spines
+    df.loc[df.weighted_by =='corr_to_nn_resp_spine','spines_included'] = 'all_spines'
+    df.loc[df.weighted_by =='dist_to_nn_resp_spine','spines_included'] = 'all_spines'
+    print(df[(
+            (df['weighted_by']=='corr_to_nn_resp_spine')
+           | (df['weighted_by']=='dist_to_nn_resp_spine')
+           )]['spines_included'].head(5))
+    weight_list =  ['democratic_weights', 'spine_size', 'distance_from_soma', 'spine_amplitude', 'corr_to_nn_resp_spine', 'dist_to_nn_resp_spine']
+    plot_weight(df, weighted_by = weight_list, spines_included = 'all_spines', prefix='Plot4', filter=False)
+
+
+def plot_4a(df):
+
+    #need to exclude democraticxall_spines
+    plot_weight(df, integration_functions=list(df['integration_function'].unique()), prefix='Plot4', filter=False)
+
+
+def plot_5(df):
+    spine_set_list =  ['all_spines', 'apical_spines', 'basal_spines', 'responsive_spines', 'unresponsive_spines']
+    plot_weight(df, spines_included = spine_set_list, prefix='Plot5', filter=False)
+
+def plot_6(df):
+    spine_set_list =  ['all_spines', 'responsive_spines', 'unresponsive_spines']
+    plot_weight(df, spines_included = spine_set_list, prefix='Plot6')
+
+
+@plot_decorator
+def plot_weight(df, integration_functions='summation', weighted_by='democratic_weights', spines_included = 'all_spines', prefix='plot_weight', trials_included = 'all_trials', paired=True, filter=True, fig=None, ax=None):
+    #Democratic, distance, size, amplitude
+
+    #use a list of tuples for the columns and values to fliter on so this can be used for title and figname
+    filter_list = [
+            ('soma_responsive_status','Responsive somas'),
+            ('trials_included', trials_included),
+            ('spines_included', spines_included),
+            ('weighted_by', weighted_by),
+            ('somatic_function','identity'),
+            ('integration_function', integration_functions)
+        ] 
+
+    text_list = []
+    for (column_name, condition) in filter_list:
+        if type(condition) is list:
+            df = df[df[column_name].isin(condition)]
+            text_list.append(f'across_{column_name}')
+            x_category = column_name
+            order = [condition]
+            #palette_colors = [cfg.colors[key] for key in condition]
+        elif condition is None:
+            pass
+        else:
+            df = df[df[column_name]==condition]
+            text_list.append(condition)
+
+    suffix = ('-').join([str(condition) for condition in text_list])
+    plot_title = f'{suffix}'
+    palette_colors = [cfg.colors['responsive']]
+    if filter:
+        df = filter_df_for_applicable_pairs(df, x_category)
+
+    
+    _ = my_violin_swarm(df,  x=x_category, y=cfg.method_to_compare,
+                            fig=fig, ax=ax,
+                            palette=palette_colors,
+                            #order=order,
+                            alpha= .6,
+                            hue = 'soma_responsive_status',
+                            split=False, paired=paired, include_line=paired
+                            )
+    ax = plt.gca()
+    ax.set_ylim([0, 1])
+    return prefix, plot_title
+
+
+
+
+
+
+
 
 def plot_simulation_tuning_curves(df, prefix=''):
+
+        #should make these nice
+        #also want to figure out how to do the muli-traces like kyle has for his demo
+        #and should also probably do ciircular variance plots
 
         ############
         #Plots and output - loop through the CSV and produce this
@@ -676,22 +839,53 @@ def plot_simulation_tuning_curves(df, prefix=''):
         #Response timing plot
         ###########
 
-def save_trace_image(traces, prefix='', ax=None):
+def reshape_traces(traces):
+    (stims, repetitions, samples) = traces.shape
+    return traces.reshape((stims, int(repetitions/cfg.output_block_size), cfg.output_block_size, samples))
+
+def save_trace_image(traces, experiment_id=None, full_model_name=None, prefix='', ax=None):
+    #TODO this is a bad function - it should be split into two functions, one for saving the traces and one for saving the image
+
     fig, ax = new_ax(ax)
     
-    traces_name = f'{prefix}{"-"*bool(prefix)}_trace_array.npy'
-    trace_path = os.path.join(cfg.collect_summary_at_path, 'traces', traces_name)
-    print(f'Saving traces to {trace_path}')
-    np.save(trace_path, np.array(traces))
+    #reshape traces to have a trial structure of certain block size
+    new_shaped_traces = reshape_traces(np.array(traces))
 
-    test_traces = np.load(trace_path)
-    selected_timesteps = comp.select_timesteps(np.array(test_traces))
+    (num_stims, num_simulations, num_trials_per_sim, num_samples_per_trace) = new_shaped_traces.shape
+    file_name = f"{prefix*bool(prefix)}{num_simulations}.npy"
+
+    if experiment_id and full_model_name:
+        sub_dir = os.path.join(experiment_id, full_model_name)
+        directory_path = os.path.join(cfg.collect_summary_at_path, sub_dir)
+    else:
+        directory_path = os.path.join(cfg.collect_summary_at_path, 'traces')
+    if not(os.path.exists(directory_path)):
+        os.makedirs(directory_path)
+    trace_path = os.path.join(directory_path, file_name)
+    print(f'Saving traces to {trace_path}')
+
+    np.save(trace_path, new_shaped_traces)
+
+    test_traces = np.load(trace_path).reshape(traces.shape)
+    
+
+    selected_timesteps = hf.select_timesteps(np.array(test_traces))
     new_idx = sort_within_all_stims(selected_timesteps, sort_by_mean_amp)#, plot.sort_by_mean_amp)
     ordered_traces = use_as_index(new_idx, selected_timesteps)
 
     ax.imshow(flatten_for_image(ordered_traces), aspect='auto')
 
-    figname = f'{prefix}{"-"*bool(prefix)}_trace_image.png'
-    fig_path = os.path.join(cfg.collect_summary_at_path, 'traces', figname)
+    figname = f'{prefix}{"-"*bool(prefix)}{full_model_name}{"-"*bool(full_model_name)}trace_image.{cfg.figure_type}'
+    fig_dir = os.path.join(cfg.collect_summary_at_path, 'trace_images', experiment_id)
+    #print(f'Saving figure to {fig_dir}')
+    if not(os.path.exists(fig_dir)):
+        os.makedirs(fig_dir)
+    fig_path = os.path.join(fig_dir, figname)
     print(f'Saving figure to {fig_path}')
     fig.savefig(fig_path, bbox_inches='tight')
+    plt.close()
+
+
+
+
+

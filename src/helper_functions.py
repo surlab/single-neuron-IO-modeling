@@ -5,7 +5,257 @@ import numpy as np
 from src import config as cfg
 from src import data_io as io
 
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+##################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+#For organizational ease - first are the helper functions utilized to produce different weightings
+#The functions are in the order they appear in the model_specifications.csv (weighted_by column first and then inclusion_based_on column)
+
+#def weights_from_corr_to_nearest_resp_spine(spine_data):
+#    return get_weight_matrix(spine_data, hf.nn_spine_stim_corr)
+
+#def weights_from_spine_amp(spine_data):
+#    return get_weight_matrix(spine_data, hf.spine_amplitude)
+
+#def weights_from_spine_reliability(spine_data):
+#    return get_weight_matrix(spine_data, hf.spine_reliability)
+
+#def weights_from_spine_reliability(spine_data):
+#    return get_weight_matrix(spine_data, hf.spine_reliability)
+
+#def weights_from_spine_reliability(spine_data):
+#    return get_weight_matrix(spine_data, hf.spine_reliability)
+
+def get_soma_traces(soma_data):
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    soma_traces = get_traces(soma_data)
+    #should be spines x directions x presentations x samples
+    start_idx, end_idx = get_sample_idxs(soma_field_2, cfg.start_s, cfg.end_s)
+    soma_traces = select_timesteps(soma_traces, start_idx, end_idx)
+    return soma_traces
+
+def get_sample_idxs(fov_activity_meta, start_s, end_s):
+
+    relative_frame_times = np.array(fov_activity_meta['trial_time'])
+
+    def find_nearest(array, value): ## from https://stackoverflow.com/questions/2566412/find-nearest-value-in-numpy-array
+        array = np.asarray(array)
+        idx = np.nanargmin(np.abs(array - value))
+        return idx, array[idx]
+
+    start_idx, actual_value = find_nearest(relative_frame_times, start_s)
+    end_idx, actual_value = find_nearest(relative_frame_times, end_s)
+    return start_idx, end_idx
+
+
+
+
+def select_timesteps(traces, first_sample=0, last_sample=-1):
+    if len(traces.shape) == 3:
+        selected_timesteps = traces[:,:,first_sample:last_sample]
+    else:
+        selected_timesteps = traces[:,:,:,first_sample:last_sample]
+    return selected_timesteps
+
+def get_stim_on_traces(traces):
+    return select_timesteps(traces, first_sample =cfg.stim_start, last_sample =cfg.stim_end )
+
+
+
+
+def get_fovs_responsive_spines(fov_activity, fov_metadata):
+    return list(fov_activity['responsive'])[0]
+
+
+def get_fovs_unresponsive_spines(fov_activity, fov_metadata):
+    return ~list(fov_activity['responsive'])[0]
+
+
+def get_fovs_apical_spines(fov_activity, fov_metadata):
+    ref = fov_metadata['structural_data']['Apical_Basal'][0][0]
+    bool_apical = chr(fov_metadata[ref][0]).lower()=='a'
+    num_spines = get_num_spines_in_fov(fov_metadata)
+    bool_apical_list = [bool_apical]*num_spines
+    return bool_apical_list
+
+
+def get_fovs_basal_spines(fov_activity, fov_metadata):
+    ref = fov_metadata['structural_data']['Apical_Basal'][0][0]
+    bool_apical = chr(fov_metadata[ref][0]).lower()=='b'
+    num_spines = get_num_spines_in_fov(fov_metadata)
+    bool_apical_list = [bool_apical]*num_spines
+    return bool_apical_list
+
+
+def get_fovs_corr_to_nearest_resp_spine(fov_activity, fov_metadata):
+    dist_corr_array = fov_activity['nn_dist_corr'][1]
+    dist_corr_array = np.nan_to_num(dist_corr_array)
+    return dist_corr_array
+
+
+def get_fovs_dist_to_nearest_resp_spine(fov_activity, fov_metadata):
+    dist_corr_array = fov_activity['nn_dist_corr'][0]
+    dist_corr_array = np.nan_to_num(dist_corr_array)
+    return dist_corr_array
+
+
+def get_fovs_spine_amplitude(fov_activity, fov_metadata):
+    return list(fov_activity['max'])[0]
+
+
+
+
+def get_fovs_spine_preferred_orientation(fov_activity, fov_metadata):
+    return list(fov_activity['pref_ori'])[0]
+
+def get_fovs_spine_preferred_direction(fov_activity, fov_metadata):
+    return list(fov_activity['pref_dir'])[0]
+
+def get_fovs_spine_dsi(fov_activity, fov_metadata):
+    return list(fov_activity['DSI'])[0]
+
+def get_fovs_spine_median_resp(fov_activity, fov_metadata):
+    return list(fov_activity['median_amp'])[0]
+
+
+
+
+def get_fovs_spines_size(fov_activity, fov_metadata):
+    return list(fov_metadata['spine_size'])[0] #strange syntax here because it needs to return a list... must be a better way but this works. Coudl we do the coersion to flat list on the other end? in the calling function?
+
+
+def get_fovs_spine_distance_from_soma(fov_activity, fov_metadata):
+    num_spines = get_num_spines_in_fov(fov_metadata)
+    fov_dist = fov_metadata['structural_data']['DistanceFromRoot_um'][0][0]
+    spines_dist = [fov_dist]*num_spines
+    return spines_dist
+
+
+def get_fovs_spine_neck_length(fov_activity, fov_metadata):
+    return list(fov_metadata['neckLength'])[0]
+
+
+def get_fovs_spine_osi(fov_activity, fov_metadata):
+    return list(fov_activity['OSI'])[0]
+
+
+def get_fovs_spine_dsi(fov_activity, fov_metadata):
+    return list(fov_activity['DSI'])[0]
+
+
+def get_fovs_spine_preferred_direction(fov_activity, fov_metadata):
+    return list(fov_activity['pref_dir'])[0]
+
+
+def get_fovs_spine_dsi(fov_activity, fov_metadata):
+    return list(fov_activity['DSI'])[0]
+
+
+def get_fovs_spine_amplitudes(fov_activity, fov_metadata):
+    return np.array(fov_activity['median_amp'])
+
+
+
+def get_fovs_spine_reliability(fov_activity, fov_metadata):
+    #at its preferred direction
+    all_reliabilities = np.array(fov_activity['reliability_index']) #spines x directions
+    preferred_stim_inidces = list(fov_activity['max'])[1] - 1 #account for change in indexing!
+    preferred_stim_inidces = np.array(preferred_stim_inidces).astype(int)
+    spine_indices = np.arange(0,len(preferred_stim_inidces))
+    pref_reliabilities = all_reliabilities[preferred_stim_inidces, spine_indices]
+    return pref_reliabilities
+
+
+def get_fovs_random_integers(fov_activity, fov_metadata):
+    param_array = list(fov_activity['DSI'])[0]
+    random_param_array = np.random.randint(0,high=len(param_array), size=len(param_array))
+    return random_param_array
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+##################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+
+
+
+def nn_spine_trace_corr(fov_activity, fov_metadata):
+    nearest_neighbor_list = get_spine_nn_idxs(fov_metadata)
+    corr_mat = get_trace_corr(fov_activity)
+    indicies = list(range(len(nearest_neighbor_list)))
+    return corr_mat[indicies,nearest_neighbor_list]
+
+
+def nn_spine_stim_corr(fov_activity, fov_metadata):
+    nearest_neighbor_list = get_spine_nn_idxs(fov_metadata)
+    corr_mat = get_stim_corr(fov_activity)
+    indicies = list(range(len(nearest_neighbor_list)))
+    return corr_mat[indicies,nearest_neighbor_list]
+
+def get_spine_nn_idxs(fov_metadata):
+    #find min for each spot in array
+    pairwise_dist_array = np.array(fov_metadata['pairwise_dist'])
+
+    #we need to replace the diagonal or it will always return the index of itself. 
+    np.fill_diagonal(pairwise_dist_array, 5)#np.max(pairwise_dist_array))
+    nearest_neighbor_list = np.argmin(pairwise_dist_array, axis=0)
+    return nearest_neighbor_list
+
+
+def get_trace_corr(fov_activity):
+    return np.array(fov_activity['total_trial_pairwise_corr'])
+
+
+def get_stim_corr(fov_activity):
+    return np.array(fov_activity['corr_vis_periods_baps_excluded'])
+
+
+def get_dist_from_root(spine_data, fov_num = 0):
+    metadata_dict = get_spine_metadata(spine_data, fov_num)
+    return metadata_dict['structural_data']['DistanceFromRoot_um'][0][0]
+
+def get_dist_from_branch(spine_data, fov_num = 0):
+    metadata_dict = get_spine_metadata(spine_data, fov_num)
+    return metadata_dict['structural_data']['DistanceFromBranch_um'][0][0]
+
+
+def get_spines_pixel_coords(spine_data, fov_num=0):
+    metadata_dict = get_spine_metadata(spine_data, fov_num)
+    return metadata_dict['spine_xy']
+
+
+def get_direction_labels(spine_data, fov_num = 0):
+    spine_activity = get_spine_activity(spine_data, fov_num)
+    ref = spine_activity['OSI_DSI_angles'][0][1]
+    return np.array(spine_data[ref])[:,0]
+
+
+def get_trial_time_labels(spine_data, fov_num = 0):
+    spine_activity = get_spine_activity(spine_data, fov_num)
+    return np.array(spine_activity['trial_time'])[:,0]
+
+
+def get_neck_length(spine_data, fov_num = 0):
+    ref = spine_data['dend_cell'][3,fov_num]#['stem_stats']#['neckLength']
+    spine_field_3 = spine_data[ref]
+    return spine_field_3
+    #spine_activity = get_spine_activity(spine_data, fov_num)
+    #return np.array(spine_activity['trial_time'])[:,0]
+
+
+
+
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+##################################################################################
+#%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+def get_model_names(model_spec, k=0):
+    full_model_name = f"{model_spec['trials_included']}-{model_spec['spines_included']}-{model_spec['inclusion_based_on']}-{model_spec['weighted_by']}-{model_spec['integration']}-{model_spec['somatic_function']}"
+    model_initials = ''.join([ s[0] for s in full_model_name.split('-') ])
+    nickname =  f'model-{model_initials}-{k}'
+    return full_model_name, nickname
 
 def fovs_in_dataset(spine_data):
     num_fovs = spine_data['dend_cell'].shape[1]
@@ -40,18 +290,52 @@ def get_spine_activity(spine_data, fov_num = 0):
 
 
 def get_precomputed_tuning_curve(soma_data):
-    soma_field_2 = io._todict(soma_data[2])
+    soma_field_2 = get_soma_activity_meta(soma_data)
     return np.array(soma_field_2['median_amp'])
 
 def include_soma(soma_data):
-    soma_field_3 = io._todict(soma_data[3])
-    return bool(soma_field_3['included'])
+    return True
+    #soma_field_3 = io._todict(soma_data[3])
+    #return bool(soma_field_3['included'])
 
 
 def get_responsive_status(soma_data):
     #get preferred orientation
-    soma_field_2 = io._todict(soma_data[2])
+    soma_field_2 = get_soma_activity_meta(soma_data)
     return bool(soma_field_2['responsive'])
+
+
+
+
+def get_soma_responsive_status(soma_data):
+    #get preferred orientation
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    return bool(soma_field_2['responsive'])
+
+def get_soma_preferred_orientation(soma_data):
+    #get preferred orientation
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    return soma_field_2['pref_ori']
+
+def get_soma_preferred_direction(soma_data):
+    #get preferred orientation
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    return soma_field_2['pref_dir']
+
+def get_soma_median_response_amplitudes(soma_data):
+    #get preferred orientation
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    return soma_field_2['median_amp']
+
+
+def get_reliability_at_pref_stim(soma_data):
+    med_resp_amps = get_soma_median_response_amplitudes(soma_data)
+    preferred_stim_idx = np.argmax(med_resp_amps)
+    
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    reliabilities = soma_field_2['reliability_index']
+    return reliabilities[preferred_stim_idx]
+
 
     #tuning_curve = get_precomputed_tuning_curve(soma_data)
     #preferred_stim_index = np.argmax(tuning_curve)
@@ -123,54 +407,6 @@ def get_branch_order(spine_data, fov_num = 0):
     return metadata_dict['structural_data']['order'][0][0]
 
 
-
-def spines_dist_from_root(fov_activity, fov_metadata):
-    num_spines = get_num_spines_in_fov(fov_metadata)
-    fov_dist = fov_metadata['structural_data']['DistanceFromRoot_um'][0][0]
-    spines_dist = [fov_dist]*num_spines
-    return spines_dist
-
-def spines_size(fov_activity, fov_metadata):
-    return list(fov_metadata['spine_size'])[0].tolist() #strange syntax here because it needs to return a list... must be a better way but this works
-
-def spines_responsiveness(fov_activity, fov_metadata):
-    return list(fov_activity['responsive'])[0].tolist()
-
-
-
-def get_dist_from_root(spine_data, fov_num = 0):
-    metadata_dict = get_spine_metadata(spine_data, fov_num)
-    return metadata_dict['structural_data']['DistanceFromRoot_um'][0][0]
-
-def get_dist_from_branch(spine_data, fov_num = 0):
-    metadata_dict = get_spine_metadata(spine_data, fov_num)
-    return metadata_dict['structural_data']['DistanceFromBranch_um'][0][0]
-
-
-def get_spines_pixel_coords(spine_data, fov_num=0):
-    metadata_dict = get_spine_metadata(spine_data, fov_num)
-    return metadata_dict['spine_xy']
-
-
-def get_direction_labels(spine_data, fov_num = 0):
-    spine_activity = get_spine_activity(spine_data, fov_num)
-    ref = spine_activity['OSI_DSI_angles'][0][1]
-    return np.array(spine_data[ref])[:,0]
-
-
-def get_trial_time_labels(spine_data, fov_num = 0):
-    spine_activity = get_spine_activity(spine_data, fov_num)
-    return np.array(spine_activity['trial_time'])[:,0]
-
-
-def get_neck_length(spine_data, fov_num = 0):
-    ref = spine_data['dend_cell'][3,fov_num]#['stem_stats']#['neckLength']
-    spine_field_3 = spine_data[ref]
-    return spine_field_3
-    #spine_activity = get_spine_activity(spine_data, fov_num)
-    #return np.array(spine_activity['trial_time'])[:,0]
-
-
 def get_fov(activity_data_struct, fov=0):
     try:
         if fov%1==0:
@@ -183,25 +419,31 @@ def get_fov(activity_data_struct, fov=0):
     return spine_field_2
 
 
-def get_traces(activity_data_struct, fov=0, spine_index=0):
+def get_traces(soma_data, fov=0, spine_index=0):
     #tried to make it work for both soma and spine structure
-    try:
-        this_fov = get_fov(activity_data_struct, fov=fov)
-        try:
-            spine_traces = np.array(this_fov['trial_traces'][:,:,0,:,spine_index].swapaxes(0,-1))
-        except TypeError as E:
-            spine_traces = np.array(io._todict(activity_data_struct[2])['trial_traces'][:,:,0,:,spine_index].swapaxes(0,-1))
-            #spine_traces = np.array(this_fov['trial_traces'])#[:,:,0,:,spine_index].swapaxes(0,-1))
-            #print(shape(spine_traces))
-            #raise()
-        traces = spine_traces
+    #Don't think this should be used for spines anymore so commenting out this part to avoid unexpected errors
 
-    except IndexError as E:
-        soma_field_2 = io._todict(activity_data_struct[2])
-        soma_traces = np.array(soma_field_2['trial_traces'])
-        traces = soma_traces
+    #try:
+    #    this_fov = get_fov(activity_data_struct, fov=fov)
+    #    try:
+    #        spine_traces = np.array(this_fov['trial_traces'][:,:,0,:,spine_index].swapaxes(0,-1))
+    #    except TypeError as E:
+    #        spine_traces = np.array(io._todict(activity_data_struct[2])['trial_traces'][:,:,0,:,spine_index].swapaxes(0,-1))
+    #        #spine_traces = np.array(this_fov['trial_traces'])#[:,:,0,:,spine_index].swapaxes(0,-1))
+    #        #print(shape(spine_traces))
+    #        #raise()
+    #    traces = spine_traces
+
+    #except IndexError as E:
+    soma_field_2 = get_soma_activity_meta(soma_data)
+    soma_traces = np.array(soma_field_2['trial_traces'])
+    traces = soma_traces
 
     return traces
+
+def get_soma_activity_meta(soma_data):
+    return io._todict(soma_data[2])
+
 
 def get_example_traces(spine_data):
     ref = spine_data['dend_cell'][2,0]

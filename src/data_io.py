@@ -7,6 +7,7 @@ import h5py
 import json
 import numpy as np
 from datetime import datetime as dt
+import pandas as pd
 
 ################
 # data in
@@ -94,13 +95,41 @@ def save_named_iterable_to_json(**kwargs):
             json.dump(value, f, indent=4)
 
 
+def simplify_output_csv(full_model_score_df, column_of_interest = 'model_soma_similarity_score'):
+    experiment_ids = full_model_score_df['experiment_id'].unique()
+    simplified_df_list = []
+    for exp_id in experiment_ids:
+        row_dict = {
+            'experiment_id': exp_id,
+        }
+        bool_index = full_model_score_df['experiment_id'] == exp_id
+        exp_df = full_model_score_df[bool_index]
+        print(exp_df.head(5))
+        model_names = exp_df['full_model_name'].unique()
+        exp_df = exp_df.set_index('full_model_name')   #Doing this here so it doesn't affect the original dataframe, not even 100% sure it would...
+        for model_name in model_names:
+            row_dict[model_name] = exp_df.loc[model_name, column_of_interest]
+        simplified_df_list.append(row_dict)
+
+    simplified_df = pd.DataFrame(simplified_df_list)
+    filename = 'SIMPLIFIED_'+column_of_interest+'s'
+    save_csv(simplified_df, name_keywords=filename)
+
+
+
+
 def save_csv(df, name_keywords=''):
     dfname = f'{name_keywords}.csv'
     df_path = os.path.join(cfg.collect_summary_at_path, dfname)
     print(f'Saving dataframe to {df_path}')
     df.to_csv(df_path)
 
-
+def from_csv(df, name_keywords=''):
+    dfname = f'{name_keywords}.csv'
+    #could add glob in here
+    df_path = os.path.join(cfg.collect_summary_at_path, dfname)
+    df = pd.read_csv(df_path, index_col=0)
+    return df
 
 def save_plot(fig, current_data_dir):
 
